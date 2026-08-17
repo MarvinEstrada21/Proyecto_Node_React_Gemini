@@ -12,15 +12,34 @@ const commentRoutes = require('./routes/commentRoutes');
 
 const app = express();
 
-// Configuración de CORS estricto (Regla de Seguridad #14)
+// Lista de orígenes configurados en variables de entorno (soporta múltiples separados por coma)
+const configuredOrigins = config.frontendOrigin
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+// Regex para permitir orígenes de desarrollo local y redes privadas/VMs (localhost, 127.0.0.1, 192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+const localNetworkOriginRegex = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+
+// Configuración de CORS segura y flexible para entorno local y máquinas virtuales (VM Kali / VirtualBox)
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permitir solicitudes sin origin (como herramientas internas o curl) o que coincidan con FRONTEND_ORIGIN
-    if (!origin || origin === config.frontendOrigin || origin === 'http://localhost:5173' || origin === 'http://127.0.0.1:5173') {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS no permitido para el origen: ${origin}`));
+    // 1. Permitir peticiones sin origin (herramientas como curl, Postman, scripts de Kali)
+    if (!origin) {
+      return callback(null, true);
     }
+
+    // 2. Permitir si coincide con alguno de los orígenes configurados en .env
+    if (configuredOrigins.includes(origin) || configuredOrigins.includes('*')) {
+      return callback(null, true);
+    }
+
+    // 3. Permitir si proviene de la máquina host o una red virtual local (ej. VM Kali)
+    if (localNetworkOriginRegex.test(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error(`CORS no permitido para el origen: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -45,6 +64,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     environment: config.nodeEnv,
+    host: config.host,
+    port: config.port,
     timestamp: new Date().toISOString()
   });
 });
@@ -60,15 +81,17 @@ app.use(notFoundHandler);
 // Manejo global de errores centralizado
 app.use(errorHandler);
 
-// Iniciar el servidor
+// Iniciar el servidor vinculando a HOST y PORT
 async function startServer() {
   await testConnection();
 
-  const server = app.listen(config.port, () => {
+  const server = app.listen(config.port, config.host, () => {
     console.log(`=======================================================`);
     console.log(` [SERVIDOR INICIADO] Recetario Backend API`);
-    console.log(` URL: http://localhost:${config.port}`);
-    console.log(` CORS permitido para: ${config.frontendOrigin}`);
+    console.log(` Host: ${config.host} (Escuchando en todas las interfaces)`);
+    console.log(` Puerto: ${config.port}`);
+    console.log(` Acceso Local Host:  http://localhost:${config.port}`);
+    console.log(` Acceso Red / VM:    http://<TU_IP_HOST>:${config.port}`);
     console.log(` Modo: ${config.nodeEnv}`);
     console.log(`=======================================================`);
   });

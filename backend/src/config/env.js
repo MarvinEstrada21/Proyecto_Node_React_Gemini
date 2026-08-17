@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const config = {
+  host: process.env.HOST || '0.0.0.0',
   port: parseInt(process.env.PORT, 10) || 4000,
   nodeEnv: process.env.NODE_ENV || 'development',
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
